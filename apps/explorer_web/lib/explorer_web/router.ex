@@ -59,6 +59,13 @@ defmodule ExplorerWeb.Router do
         only: [:index],
         as: :internal_transaction
       )
+
+      resources(
+        "/contract",
+        AddressVerifyContractController,
+        only: [:new, :create],
+        as: :verify_contract
+      )
     end
 
     get("/search", ChainController, :search)
