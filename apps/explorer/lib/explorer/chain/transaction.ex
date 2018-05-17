@@ -98,7 +98,7 @@ defmodule Explorer.Chain.Transaction do
           block: %Ecto.Association.NotLoaded{} | Block.t() | nil,
           block_hash: Hash.t() | nil,
           from_address: %Ecto.Association.NotLoaded{} | Address.t(),
-          from_address_hash: Hash.Truncated.t(),
+          from_address_hash: Hash.Address.t(),
           gas: Gas.t(),
           gas_price: wei_per_gas,
           hash: Hash.t(),
@@ -112,7 +112,7 @@ defmodule Explorer.Chain.Transaction do
           s: s(),
           standard_v: standard_v(),
           to_address: %Ecto.Association.NotLoaded{} | Address.t(),
-          to_address_hash: Hash.Truncated.t(),
+          to_address_hash: Hash.Address.t(),
           v: v(),
           value: Wei.t()
         }
@@ -140,7 +140,7 @@ defmodule Explorer.Chain.Transaction do
       Address,
       foreign_key: :from_address_hash,
       references: :hash,
-      type: Hash.Truncated
+      type: Hash.Address
     )
 
     has_many(:internal_transactions, InternalTransaction, foreign_key: :transaction_hash)
@@ -151,7 +151,7 @@ defmodule Explorer.Chain.Transaction do
       Address,
       foreign_key: :to_address_hash,
       references: :hash,
-      type: Hash.Truncated
+      type: Hash.Address
     )
   end
 

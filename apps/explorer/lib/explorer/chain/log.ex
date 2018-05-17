@@ -26,7 +26,7 @@ defmodule Explorer.Chain.Log do
   """
   @type t :: %__MODULE__{
           address: %Ecto.Association.NotLoaded{} | Address.t(),
-          address_hash: Hash.Truncated.t(),
+          address_hash: Hash.Address.t(),
           data: Data.t(),
           first_topic: String.t(),
           fourth_topic: String.t(),
@@ -50,7 +50,7 @@ defmodule Explorer.Chain.Log do
 
     timestamps()
 
-    belongs_to(:address, Address, foreign_key: :address_hash, references: :hash, type: Hash.Truncated)
+    belongs_to(:address, Address, foreign_key: :address_hash, references: :hash, type: Hash.Address)
     belongs_to(:receipt, Receipt, foreign_key: :transaction_hash, references: :transaction_hash, type: Hash.Full)
     has_one(:transaction, through: [:receipt, :transaction])
   end

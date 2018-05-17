@@ -25,12 +25,12 @@ defmodule Explorer.Chain.Address do
   @type t :: %__MODULE__{
           fetched_balance: Wei.t(),
           balance_fetched_at: DateTime.t(),
-          hash: Hash.Truncated.t(),
+          hash: Hash.Address.t(),
           inserted_at: DateTime.t(),
           updated_at: DateTime.t()
         }
 
-  @primary_key {:hash, Hash.Truncated, autogenerate: false}
+  @primary_key {:hash, Hash.Address, autogenerate: false}
   schema "addresses" do
     field(:fetched_balance, Wei)
     field(:balance_fetched_at, Timex.Ecto.DateTime)
@@ -52,7 +52,7 @@ defmodule Explorer.Chain.Address do
     |> unique_constraint(:hash)
   end
 
-  @spec hash_set_to_changes_list(MapSet.t(Hash.Truncated.t())) :: [%{hash: Hash.Truncated.t()}]
+  @spec hash_set_to_changes_list(MapSet.t(Hash.Address.t())) :: [%{hash: Hash.Address.t()}]
   def hash_set_to_changes_list(hash_set) do
     Enum.map(hash_set, &hash_to_changes/1)
   end
