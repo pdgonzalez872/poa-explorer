@@ -3,8 +3,6 @@ defmodule ExplorerWeb.ContributorBrowsingTest do
 
   import Wallaby.Query, only: [css: 1, css: 2, link: 1]
 
-  alias Explorer.Chain.{Credit, Debit}
-
   @logo css("[data-test='header_logo']")
 
   test "browses the home page", %{session: session} do
@@ -73,9 +71,6 @@ defmodule ExplorerWeb.ContributorBrowsingTest do
     insert(:transaction, block_hash: fifth_block.hash, index: 1)
     insert(:transaction, block_hash: fifth_block.hash, index: 2)
     insert(:receipt, transaction_hash: transaction.hash, transaction_index: transaction.index)
-
-    Credit.refresh()
-    Debit.refresh()
 
     session
     |> visit("/en")
@@ -149,9 +144,6 @@ defmodule ExplorerWeb.ContributorBrowsingTest do
         insert(:receipt, transaction_hash: txn_from_lincoln.hash, transaction_index: txn_from_lincoln.index)
 
       internal = insert(:internal_transaction, transaction_hash: internal_receipt.transaction_hash)
-
-      Credit.refresh()
-      Debit.refresh()
 
       {:ok,
        %{
