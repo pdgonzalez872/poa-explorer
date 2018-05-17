@@ -1,5 +1,5 @@
-defmodule Explorer.Chain.Hash.AddressTest do
+defmodule Explorer.Chain.Hash.NonceTest do
   use ExUnit.Case, async: true
 
-  doctest Explorer.Chain.Hash.Address
+  doctest Explorer.Chain.Hash.Nonce
 end
