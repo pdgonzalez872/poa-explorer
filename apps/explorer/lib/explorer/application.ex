@@ -10,7 +10,8 @@ defmodule Explorer.Application do
     # Children to start in all environments
     base_children = [
       Explorer.Repo,
-      {Task.Supervisor, name: Explorer.MarketTaskSupervisor}
+      {Task.Supervisor, name: Explorer.MarketTaskSupervisor},
+      Supervisor.child_spec({Task.Supervisor, name: Explorer.TaskSupervisor}, id: Explorer.TaskSupervisor),
     ]
 
     children = base_children ++ secondary_children(Mix.env())
@@ -25,7 +26,6 @@ defmodule Explorer.Application do
   # Children to start when not testing
   defp secondary_children(_) do
     [
-      Supervisor.child_spec({Task.Supervisor, name: Explorer.TaskSupervisor}, id: Explorer.TaskSupervisor),
       Explorer.Indexer.Supervisor,
       Explorer.Chain.Statistics.Server,
       Explorer.ExchangeRates,
