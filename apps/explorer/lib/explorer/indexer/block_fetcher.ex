@@ -20,7 +20,7 @@ defmodule Explorer.Indexer.BlockFetcher do
 
   @debug_logs false
 
-  @blocks_batch_size 10
+  @blocks_batch_size 1
   @blocks_concurrency 10
 
   @internal_transactions_batch_size 50
@@ -172,11 +172,11 @@ defmodule Explorer.Indexer.BlockFetcher do
 
   defp fetch_transaction_receipts(_state, []), do: {:ok, %{logs: [], receipts: []}}
 
-  defp fetch_transaction_receipts(%{} = state, hashes) do
-    debug(state, fn -> "fetching #{length(hashes)} transaction receipts" end)
+  defp fetch_transaction_receipts(%{} = state, transaction_params) do
+    debug(state, fn -> "fetching #{length(transaction_params)} transaction receipts" end)
     stream_opts = [max_concurrency: state.receipts_concurrency, timeout: :infinity]
 
-    hashes
+    transaction_params
     |> Enum.chunk_every(state.receipts_batch_size)
     |> Task.async_stream(&EthereumJSONRPC.fetch_transaction_receipts(&1), stream_opts)
     |> Enum.reduce_while({:ok, %{logs: [], receipts: []}}, fn
@@ -206,6 +206,19 @@ defmodule Explorer.Indexer.BlockFetcher do
       :ok = AddressFetcher.async_fetch_balances(address_hashes)
       ok
     else
+      {:error, changesets} ->
+        internal_transaction_params = Map.fetch!(params, :internal_transactions)
+
+        messages =
+          internal_transaction_params
+          |> Stream.zip(changesets)
+          |> Stream.map(fn {params, changeset} ->
+            "params: #{inspect(params)}\n\nchangesets: #{inspect(changeset)}"
+          end)
+          |> Enum.join("\n\n\n")
+
+        raise "\n#{messages}"
+
       {:error, step, reason} = error ->
         debug(state, fn ->
           "failed to insert blocks during #{step} #{inspect(range)}: #{inspect(reason)}. Retrying"
@@ -260,9 +273,9 @@ defmodule Explorer.Indexer.BlockFetcher do
     with {:blocks, {:ok, next, result}} <- {:blocks, EthereumJSONRPC.fetch_blocks_by_range(block_start, block_end)},
          %{blocks: blocks, transactions: transactions} = result,
          cap_seq(seq, next, range, state),
-         transaction_hashes = Transactions.params_to_hashes(transactions),
-         {:receipts, {:ok, receipt_params}} <- {:receipts, fetch_transaction_receipts(state, transaction_hashes)},
+         {:receipts, {:ok, receipt_params}} <- {:receipts, fetch_transaction_receipts(state, transactions)},
          %{logs: logs, receipts: receipts} = receipt_params,
+         transaction_hashes = Transactions.params_to_hashes(transactions),
          {:internal_transactions, {:ok, internal_transactions}} <-
            {:internal_transactions, fetch_internal_transactions(state, transaction_hashes)} do
       insert(state, seq, range, %{

@@ -762,7 +762,7 @@ defmodule Explorer.Chain do
           internal_transactions: internal_transactions_params,
           receipts: receipts_params,
           transactions: transactions_params
-        },
+        } = input,
         options \\ []
       )
       when is_list(blocks_params) and is_list(internal_transactions_params) and is_list(logs_params) and
