@@ -2,9 +2,6 @@
 
 set -e
 
-log "Getting OS information"
-cat /etc/*-release
-
 # Log a timestamped message to the console
 function log() {
     ts=$(date '+%Y-%m-%dT%H:%M:%SZ')
@@ -70,6 +67,9 @@ function deploy_chain() {
 
     return 0
 }
+
+log "Getting OS information"
+cat /etc/*-release
 
 # Make sure we got an environment as an argument to this script
 DEPLOY_ENV="${1:-$CIRCLE_BRANCH}"
