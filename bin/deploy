@@ -2,6 +2,9 @@
 
 set -x
 
+log "Getting OS information"
+cat /etc/*-release
+
 # Log a timestamped message to the console
 function log() {
     ts=$(date '+%Y-%m-%dT%H:%M:%SZ')
@@ -100,6 +103,8 @@ CHAINS="$(echo "$CHAINS" | tr ',' '\n')"
 
 # Install AWS CLI
 if ! which aws >/dev/null; then
+    log "Installing python devel packages"
+    yum install python-devel
     log "Installing AWS CLI.."
     mkdir -p ~/bin
     wget "https://s3.amazonaws.com/aws-cli/awscli-bundle.zip"
