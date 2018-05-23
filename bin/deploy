@@ -110,8 +110,6 @@ CHAINS="$(echo "$CHAINS" | tr ',' '\n')"
 
 # Install AWS CLI
 if ! which aws >/dev/null; then
-    log "Installing python devel packages"
-    yum install python-devel
     log "Installing AWS CLI.."
     pip install awscli --upgrade --user
     export PATH=$HOME/.local/bin:$PATH
