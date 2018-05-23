@@ -20,6 +20,8 @@ defmodule Explorer.Chain.Wei do
 
   """
 
+  alias Explorer.Chain.Wei
+
   defstruct ~w(value)a
 
   @behaviour Ecto.Type
@@ -110,6 +112,23 @@ defmodule Explorer.Chain.Wei do
 
   @wei_per_ether Decimal.new(1_000_000_000_000_000_000)
   @wei_per_gwei Decimal.new(1_000_000_000)
+
+  @doc """
+  Sums two Wei values.
+
+  ## Example
+
+      iex> first = %Explorer.Chain.Wei{value: Decimal.new(123)}
+      iex> second = %Explorer.Chain.Wei{value: Decimal.new(1_000)}
+      iex> Explorer.Chain.Wei.sum(first, second)
+      %Explorer.Chain.Wei{value: Decimal.new(1_123)}
+  """
+  @spec sum(Wei.t(), Wei.t()) :: Wei.t()
+  def sum(%Wei{value: wei_1}, %Wei{value: wei_2}) do
+    wei_1
+    |> Decimal.add(wei_2)
+    |> from(:wei)
+  end
 
   @doc """
   Converts `Decimal` representations of various wei denominations (wei, Gwei, ether) to

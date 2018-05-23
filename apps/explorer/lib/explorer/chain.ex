@@ -6,7 +6,7 @@ defmodule Explorer.Chain do
   import Ecto.Query, only: [from: 2, join: 4, or_where: 3, order_by: 2, order_by: 3, preload: 2, where: 2, where: 3]
 
   alias Ecto.{Changeset, Multi}
-  alias Explorer.Chain.{Address, Block, Data, Hash, InternalTransaction, Log, Receipt, Transaction, Wei}
+  alias Explorer.Chain.{Address, Block, BlockReward, Data, Hash, InternalTransaction, Log, Receipt, Transaction, Wei}
   alias Explorer.Repo
 
   @typedoc """
@@ -196,6 +196,49 @@ defmodule Explorer.Chain do
   def block_count do
     Repo.aggregate(Block, :count, :hash)
   end
+
+  @doc """
+  Reward for mining a block.
+
+  The block reward is the sum of the following:
+
+  * Sum of the transaction fees (gas_used * gas_price) for the block
+  * A static reward for miner (this value may change during the life of the chain)
+  * The reward for uncle blocks (1/32 * static_reward * number_of_uncles)
+
+  *NOTE*
+
+  Uncles are not currently accounted for.
+  """
+  @spec block_reward(Block.t()) :: Wei.t()
+  def block_reward(%Block{number: block_number}) do
+    query =
+      from(
+        block in Block,
+        left_join: transaction in assoc(block, :transactions),
+        left_join: receipt in assoc(transaction, :receipt),
+        inner_join: block_reward in BlockReward,
+        on: fragment("? <@ ?", block.number, block_reward.block_range),
+        where: block.number == ^block_number,
+        group_by: block_reward.reward,
+        select: %{
+          transaction_reward: sum(fragment("?*?", receipt.gas_used, transaction.gas_price)),
+          static_reward: block_reward.reward
+        }
+      )
+
+    %{
+      transaction_reward: transaction_reward,
+      static_reward: static_reward
+    } = Repo.one(query)
+
+    transaction_reward
+    |> safe_wrap_transaction_reward()
+    |> Wei.sum(static_reward)
+  end
+
+  defp safe_wrap_transaction_reward(nil), do: Wei.from(Decimal.new(0), :wei)
+  defp safe_wrap_transaction_reward(%Decimal{} = value), do: Wei.from(value, :wei)
 
   @doc """
   Finds all `t:Explorer.Chain.Transaction.t/0` in the `t:Explorer.Chain.Block.t/0`.
