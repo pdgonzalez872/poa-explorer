@@ -111,6 +111,7 @@ jobs:
             - doc
             - mix.exs
             - mix.lock
+            - appspec.yml
   check_formatted:
     docker:
       # Ensure .tool-versions matches
@@ -144,7 +145,7 @@ jobs:
   deploy_aws:
     docker:
       # Ensure .tool-versions matches
-      - image: circleci/elixir:1.6.4
+      - image: circleci/python:2.7-stretch
 
     working_directory: ~/app
 
