@@ -26,7 +26,8 @@ defmodule Explorer.Chain do
     Log,
     Receipt,
     Transaction,
-    Wei
+    Wei,
+    SmartContract
   }
 
   alias Explorer.Repo
@@ -1447,6 +1448,25 @@ defmodule Explorer.Chain do
   @spec value(Transaction.t(), :ether) :: Wei.ether()
   def value(%type{value: value}, unit) when type in [InternalTransaction, Transaction] do
     Wei.to(value, unit)
+  end
+
+  def smart_contract_bytecode(address_hash) do
+    query =
+      from(
+        t in Explorer.Chain.InternalTransaction,
+        where: t.created_contract_address_hash == ^address_hash,
+        select: t.created_contract_code
+      )
+
+    query
+    |> Explorer.Repo.one()
+    |> Explorer.Chain.Data.to_string()
+  end
+
+  def create_smart_contract(attrs \\ %{}) do
+    %SmartContract{}
+    |> SmartContract.changeset(attrs)
+    |> Repo.insert()
   end
 
   defp address_hash_to_transactions(
