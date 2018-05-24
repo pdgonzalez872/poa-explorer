@@ -81,6 +81,7 @@ log "Deploying to environment '${DEPLOY_ENV}'"
 
 # Make sure we have credentials set
 log "Verifying credentials.."
+log "Using AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}"
 if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
     error "Unable to perform deploy: missing AWS credentials!"
 fi
