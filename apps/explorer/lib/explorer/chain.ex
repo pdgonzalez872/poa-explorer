@@ -883,7 +883,7 @@ defmodule Explorer.Chain do
   end
 
   @doc """
-  TODO
+  Returns a stream of all transactions with unfetched internal transactions.
   """
   def stream_transactions_with_unfetched_internal_transactions(initial, reducer)
       when is_function(reducer) do
@@ -894,7 +894,6 @@ defmodule Explorer.Chain do
       |> Enum.reduce(initial, reducer)
     end)
   end
-
 
   @doc """
   The number of `t:Explorer.Chain.Log.t/0`.
@@ -1596,18 +1595,44 @@ defmodule Explorer.Chain do
   @doc """
   TODO
   """
-  def import_internal_transactions(internal_transactions_params) do
-    changes =
+  def import_internal_transactions(transaction_hashes, internal_transactions_params) do
+    transactions_count = length(transaction_hashes)
+    timestamps = timestamps()
+
+    {:ok, %{InternalTransaction => changes}} =
       ecto_schema_module_to_params_list_to_ecto_schema_module_to_changes_list(%{
         InternalTransaction => internal_transactions_params,
       })
 
-    Repo.transaction(fn ->
+    addresses_changes =
+      %{InternalTransaction => changes}
+      |> ecto_schema_module_to_changes_list_to_address_hash_set()
+      |> Address.hash_set_to_changes_list()
+
+
+    Multi.new()
+    |> Multi.run(:addresses, fn _ ->
+      insert_addresses(
+        addresses_changes,
+        timeout: @insert_addresses_timeout,
+        timestamps: timestamps
+      )
+    end)
+    |> Multi.run(:transactions, fn _ ->
+      {^transactions_count, result} =
+        from(t in Transaction,
+          where: t.hash in ^transaction_hashes,
+          update: [set: [internal_transactions_indexed_at: ^timestamps.updated_at]])
+        |> Repo.update_all([])
+      {:ok, result}
+    end)
+    |> Multi.run(:internal_transactions, fn _ ->
       insert_internal_transactions(changes,
         timestamps: timestamps(),
         timeout: @insert_internal_transactions_timeout
       )
     end)
+    |> Repo.transaction()
   end
 
   @spec insert_internal_transactions([map()], [timestamps_option]) ::

@@ -5,7 +5,8 @@ defmodule Explorer.Indexer.BlockFetcherTest do
   import ExUnit.CaptureLog
 
   alias Explorer.Chain.{Address, Block, InternalTransaction, Log, Receipt, Transaction}
-  alias Explorer.Indexer.{BlockFetcher, Sequence}
+  alias Explorer.Indexer
+  alias Explorer.Indexer.{BlockFetcher, AddressFetcher, Sequence}
 
   @tag capture_log: true
 
@@ -31,8 +32,7 @@ defmodule Explorer.Indexer.BlockFetcherTest do
     test "starts fetching blocks from Genesis" do
       assert Repo.aggregate(Block, :count, :hash) == 0
 
-      start_supervised!({Task.Supervisor, name: Explorer.Indexer.TaskSupervisor})
-      start_supervised!(BlockFetcher)
+      start_supervised!(Explorer.Indexer.Supervisor)
 
       wait(fn ->
         Repo.one!(from(block in Block, where: block.number == @first_full_block_number))
@@ -60,14 +60,16 @@ defmodule Explorer.Indexer.BlockFetcherTest do
 
     test "without debug_logs", %{state: state} do
       assert capture_log_at_level(:debug, fn ->
-               BlockFetcher.handle_info(:debug_count, %{state | debug_logs: false})
+               Indexer.disable_debug_logs()
+               BlockFetcher.handle_info(:debug_count, state)
              end) == ""
     end
 
     test "with debug_logs", %{state: state} do
       log =
         capture_log_at_level(:debug, fn ->
-          BlockFetcher.handle_info(:debug_count, %{state | debug_logs: true})
+          Indexer.enable_debug_logs()
+          BlockFetcher.handle_info(:debug_count, state)
         end)
 
       assert log =~ "blocks: 4"
@@ -83,8 +85,11 @@ defmodule Explorer.Indexer.BlockFetcherTest do
 
     setup do
       start_supervised!({Task.Supervisor, name: Explorer.Indexer.TaskSupervisor})
-
-      {:ok, state} = BlockFetcher.init(debug_logs: false)
+      start_supervised!(
+        {Explorer.BufferedTask,
+          {AddressFetcher, max_batch_size: 100, max_concurrency: 2, name: AddressFetcher}}
+      )
+      {:ok, state} = BlockFetcher.init([])
 
       %{state: state}
     end
@@ -218,7 +223,7 @@ defmodule Explorer.Indexer.BlockFetcherTest do
   end
 
   defp state(_) do
-    {:ok, state} = BlockFetcher.init(debug_logs: false)
+    {:ok, state} = BlockFetcher.init([])
 
     %{state: state}
   end

@@ -11,12 +11,6 @@ defmodule Explorer.Indexer.AddressFetcherTest do
     bytes: <<139, 243, 141, 71, 100, 146, 144, 100, 242, 212, 211, 165, 101, 32, 167, 106, 179, 223, 65, 91>>
   }
 
-  setup do
-    start_supervised!({Task.Supervisor, name: Explorer.Indexer.TaskSupervisor})
-
-    :ok
-  end
-
   describe "init/1" do
     test "fetches unfetched addresses" do
       unfetched_address = insert(:address, hash: @hash)
@@ -63,14 +57,9 @@ defmodule Explorer.Indexer.AddressFetcherTest do
     end
   end
 
-  defp start_address_fetcher(options \\ []) when is_list(options) do
-    start_supervised!(
-      {AddressFetcher,
-       Keyword.merge(
-         [debug_logs: false, fetch_interval: 1, max_batch_size: 1, max_concurrency: 1],
-         options
-       )}
-    )
+  defp start_address_fetcher(opts \\ []) when is_list(opts) do
+    defaults = [flush_interval: 50, max_batch_size: 1, max_concurrency: 1, name: AddressFetcher]
+    start_supervised!({Explorer.BufferedTask, {AddressFetcher, Keyword.merge(defaults, opts)}})
   end
 
   defp wait(producer) do

@@ -11,10 +11,8 @@ defmodule Explorer.BufferedTask do
   @callback run(entries :: list, retries :: pos_integer) ::
     :ok | {:retry, reason :: term} | {:halt, reason :: term}
 
-  @flush_interval :timer.seconds(3)
-
-  def buffer(server, entry) do
-    GenServer.call(server, {:buffer, entry})
+  def buffer(server, entries) when is_list(entries) do
+    GenServer.call(server, {:buffer, entries})
   end
 
   def start_link({module, base_opts}) do
@@ -29,9 +27,8 @@ defmodule Explorer.BufferedTask do
 
     state = %{
       callback_module: callback_module,
-      debug_logs: Keyword.get(opts, :debug_logs, false),
       flush_timer: nil,
-      flush_interval: Keyword.get(opts, :flush_interval, @flush_interval),
+      flush_interval: Keyword.fetch!(opts, :flush_interval),
       max_batch_size: Keyword.fetch!(opts, :max_batch_size),
       max_concurrency: Keyword.fetch!(opts, :max_concurrency),
       current_buffer: [],
@@ -93,14 +90,20 @@ defmodule Explorer.BufferedTask do
 
   defp buffer_entries(state, []), do: state
   defp buffer_entries(state, entries) do
-    current_buffer = entries ++ state.current_buffer
-    {batch, overflow} = Enum.split(current_buffer, state.max_batch_size)
+    {time, state} = :timer.tc(fn ->
+      current_buffer = entries ++ state.current_buffer
+      {batch, overflow} = Enum.split(current_buffer, state.max_batch_size)
 
-    if length(batch) == state.max_batch_size do
-      queue(%{state | current_buffer: overflow}, batch, 0)
-    else
-      %{state | current_buffer: current_buffer}
-    end
+      if length(batch) == state.max_batch_size do
+        queue(%{state | current_buffer: overflow}, batch, 0)
+      else
+        %{state | current_buffer: current_buffer}
+      end
+    end)
+
+    IO.inspect(time/1_000_000)
+
+    state
   end
 
   defp queue(state, batch, retries) do
@@ -153,7 +156,6 @@ defmodule Explorer.BufferedTask do
 
       task =
         Task.Supervisor.async_nolink(Explorer.TaskSupervisor, fn ->
-          debug(state, fn -> "processing #{Enum.count(batch)} entries for #{inspect(state.callback_module)}" end)
           {:performed, state.callback_module.run(batch, retries)}
         end)
 
@@ -173,7 +175,4 @@ defmodule Explorer.BufferedTask do
     |> queue(batch, 0)
     |> flush()
   end
-
-  defp debug(%{debug_logs: true}, func), do: Logger.debug(func)
-  defp debug(%{debug_logs: false}, _func), do: :noop
 end
