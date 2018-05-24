@@ -48,7 +48,7 @@ defmodule Explorer.BufferedTaskTest do
   end
 
 
-  test "init allows buffer to be loaded up with initial entries" do
+  test "init buffers initial entries then executes on-demand entries" do
     Process.register(self(), CounterTask)
     {:ok, buffer} = start_buffer(CounterTask)
 
@@ -63,6 +63,10 @@ defmodule Explorer.BufferedTaskTest do
     assert_receive {:run, ~w(12 13)}
     assert_receive {:run, ~w(14 15)}
     assert_receive {:run, ~w(16)}
+    refute_receive _
+
+    BufferedTask.buffer(buffer, ~w(17))
+    assert_receive {:run, ~w(17)}
     refute_receive _
   end
 
