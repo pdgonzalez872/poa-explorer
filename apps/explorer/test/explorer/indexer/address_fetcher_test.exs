@@ -58,7 +58,15 @@ defmodule Explorer.Indexer.AddressFetcherTest do
   end
 
   defp start_address_fetcher(opts \\ []) when is_list(opts) do
-    defaults = [flush_interval: 50, max_batch_size: 1, max_concurrency: 1, name: AddressFetcher]
+    defaults = [
+      name: AddressFetcher,
+      task_supervisor: TaskSup,
+      init_chunk_size: 1,
+      max_concurrency: 1,
+      flush_interval: 50,
+      max_batch_size: 1,
+    ]
+    start_supervised!({Task.Supervisor, name: TaskSup})
     start_supervised!({Explorer.BufferedTask, {AddressFetcher, Keyword.merge(defaults, opts)}})
   end
 

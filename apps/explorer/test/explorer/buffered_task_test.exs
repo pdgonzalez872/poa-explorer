@@ -5,20 +5,23 @@ defmodule Explorer.BufferedTaskTest do
 
   @max_batch_size 2
 
-
   defp start_buffer(callback_module) do
-    start_supervised({BufferedTask, {callback_module,
-      flush_interval: 50,
-      max_batch_size: @max_batch_size,
-      max_concurrency: 2,
-      stream_chunk_size: @max_batch_size * 2}}
+    start_supervised!({Task.Supervisor, name: BufferedTaskSup})
+    start_supervised(
+      {BufferedTask,
+       {callback_module,
+        task_supervisor: BufferedTaskSup,
+        flush_interval: 50,
+        max_batch_size: @max_batch_size,
+        max_concurrency: 2,
+        init_chunk_size: @max_batch_size * 2}}
     )
   end
 
   defmodule CounterTask do
     @behaviour BufferedTask
 
-    def initial_collection, do:  for i <- 1..11, do: "#{i}"
+    def initial_collection, do: for(i <- 1..11, do: "#{i}")
 
     def init(acc, reducer) do
       {:ok, Enum.reduce(initial_collection(), acc, fn item, acc -> reducer.(item, acc) end)}
@@ -31,7 +34,6 @@ defmodule Explorer.BufferedTaskTest do
   end
 
   defmodule EmptyTask do
-
     @behaviour BufferedTask
 
     def init(acc, _reducer) do
@@ -55,6 +57,7 @@ defmodule Explorer.BufferedTaskTest do
       send(__MODULE__, {:run, {0, :boom}})
       raise "boom"
     end
+
     def run([:boom], 1) do
       send(__MODULE__, {:run, {1, :boom}})
       :ok
@@ -69,12 +72,12 @@ defmodule Explorer.BufferedTaskTest do
       send(__MODULE__, {:run, {retries, batch}})
       {:retry, :because_reasons}
     end
+
     def run(batch, retries) do
       send(__MODULE__, {:final_run, {retries, batch}})
       :ok
     end
   end
-
 
   test "init buffers initial entries then executes on-demand entries" do
     Process.register(self(), CounterTask)
@@ -85,6 +88,7 @@ defmodule Explorer.BufferedTaskTest do
     |> Enum.each(fn batch ->
       assert_receive {:run, ^batch}
     end)
+
     refute_receive _
 
     BufferedTask.buffer(buffer, ~w(12 13 14 15 16))
@@ -97,7 +101,6 @@ defmodule Explorer.BufferedTaskTest do
     assert_receive {:run, ~w(17)}
     refute_receive _
   end
-
 
   test "init with zero entries schedules future buffer flushes" do
     Process.register(self(), EmptyTask)
@@ -138,10 +141,10 @@ defmodule Explorer.BufferedTaskTest do
 
   test "debug_count/1 returns count of buffered entries" do
     {:ok, buffer} = start_buffer(RetryableTask)
-    assert 0 = BufferedTask.debug_count(buffer)
+    assert %{buffer: 0, tasks: 0} = BufferedTask.debug_count(buffer)
     BufferedTask.buffer(buffer, [{:sleep, 100}])
     BufferedTask.buffer(buffer, [{:sleep, 100}])
     BufferedTask.buffer(buffer, [{:sleep, 100}])
-    assert 3 = BufferedTask.debug_count(buffer)
+    assert %{buffer: 3, tasks: 0} = BufferedTask.debug_count(buffer)
   end
 end

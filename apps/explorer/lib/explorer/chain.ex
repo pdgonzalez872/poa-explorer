@@ -851,7 +851,7 @@ defmodule Explorer.Chain do
   When there are addresses, the `reducer` is called for each `t:Explorer.Chain.Address.t/0`.
 
       iex> [first_address_hash, second_address_hash] = 2 |> insert_list(:address) |> Enum.map(& &1.hash)
-      iex> {:ok, address_hash_set} = Explorer.Chain.stream_unfetched_addresses(
+      iex> {:ok, address_hash_set} = Explorer.Chain.stream_unfetched_addresses([:hash],
       ...>   MapSet.new([]),
       ...>   fn %Explorer.Chain.Address{hash: hash}, acc ->
       ...>     MapSet.put(acc, hash)
@@ -865,7 +865,7 @@ defmodule Explorer.Chain do
   When there are no addresses, the `reducer` is never called and the `initial` is returned in an `:ok` tuple.
 
       iex> {:ok, pid} = Agent.start_link(fn -> 0 end)
-      iex> Explorer.Chain.stream_unfetched_addresses(MapSet.new([]), fn %Explorer.Chain.Address{hash: hash}, acc ->
+      iex> Explorer.Chain.stream_unfetched_addresses([:hash], MapSet.new([]), fn %Explorer.Chain.Address{hash: hash}, acc ->
       ...>   Agent.update(pid, &(&1 + 1))
       ...>   MapSet.put(acc, hash)
       ...> end)
@@ -1595,10 +1595,17 @@ defmodule Explorer.Chain do
   end
 
   @doc """
-  TODO
+  Imports internal transactions and new addresses into the chain.
+
+    * `transaction_hashes` - The list of transaction hashes to have
+      the `internal_transactions_indexed_at` column timestamped for, indicating
+      their deferred internal transactions have been fetched and indexed.
+    * `internal_transactions_params` - The internal transaction paramater data
+      to be inserted.
+
+  Returns `{:ok, results}`, or `{:error, failed_operation, failed_value, changes_so_far}`
   """
   def import_internal_transactions(transaction_hashes, internal_transactions_params) do
-    transactions_count = length(transaction_hashes)
     timestamps = timestamps()
 
     {:ok, %{InternalTransaction => changes}} =
@@ -1611,30 +1618,29 @@ defmodule Explorer.Chain do
       |> ecto_schema_module_to_changes_list_to_address_hash_set()
       |> Address.hash_set_to_changes_list()
 
-
     Multi.new()
     |> Multi.run(:addresses, fn _ ->
-      insert_addresses(
-        addresses_changes,
-        timeout: @insert_addresses_timeout,
-        timestamps: timestamps
-      )
+      opts = [timeout: @insert_addresses_timeout, timestamps: timestamps]
+      insert_addresses(addresses_changes, opts)
     end)
     |> Multi.run(:transactions, fn _ ->
-      {^transactions_count, result} =
-        from(t in Transaction,
-          where: t.hash in ^transaction_hashes,
-          update: [set: [internal_transactions_indexed_at: ^timestamps.updated_at]])
-        |> Repo.update_all([], timeout: @transaction_timeout)
-      {:ok, result}
+      touch_internal_transactions_index_at(transaction_hashes)
     end)
     |> Multi.run(:internal_transactions, fn _ ->
-      insert_internal_transactions(changes,
-        timestamps: timestamps(),
-        timeout: @insert_internal_transactions_timeout
-      )
+      opts = [timestamps: timestamps(), timeout: @insert_internal_transactions_timeout]
+      insert_internal_transactions(changes, opts)
     end)
     |> Repo.transaction(timeout: @transaction_timeout)
+  end
+  defp touch_internal_transactions_index_at(transaction_hashes) do
+    transactions_count = length(transaction_hashes)
+    {^transactions_count, result} =
+      from(t in Transaction,
+        where: t.hash in ^transaction_hashes,
+        update: [set: [internal_transactions_indexed_at: ^timestamps().updated_at]])
+      |> Repo.update_all([], timeout: @transaction_timeout)
+
+    {:ok, result}
   end
 
   @spec insert_internal_transactions([map()], [timestamps_option]) ::

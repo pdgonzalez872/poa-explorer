@@ -6,7 +6,7 @@ defmodule Explorer.Indexer.BlockFetcherTest do
 
   alias Explorer.Chain.{Address, Block, InternalTransaction, Log, Receipt, Transaction}
   alias Explorer.Indexer
-  alias Explorer.Indexer.{BlockFetcher, AddressFetcher, Sequence}
+  alias Explorer.Indexer.{BlockFetcher, InternalTransactionFetcher, AddressFetcher, Sequence}
 
   @tag capture_log: true
 
@@ -58,20 +58,32 @@ defmodule Explorer.Indexer.BlockFetcherTest do
       :ok
     end
 
+    @tag :capture_log
+    @heading "persisted counts"
     test "without debug_logs", %{state: state} do
-      assert capture_log_at_level(:debug, fn ->
-               Indexer.disable_debug_logs()
-               BlockFetcher.handle_info(:debug_count, state)
-             end) == ""
+      start_supervised!({Task.Supervisor, name: Explorer.Indexer.TaskSupervisor})
+      start_address_fetcher!()
+      start_internal_transaction_fetcher!()
+
+      refute capture_log_at_level(:debug, fn ->
+        Indexer.disable_debug_logs()
+        BlockFetcher.handle_info(:debug_count, state)
+      end) =~ @heading
     end
 
+    @tag :capture_log
     test "with debug_logs", %{state: state} do
+      start_supervised!({Task.Supervisor, name: Explorer.Indexer.TaskSupervisor})
+      start_address_fetcher!()
+      start_internal_transaction_fetcher!()
+
       log =
         capture_log_at_level(:debug, fn ->
           Indexer.enable_debug_logs()
           BlockFetcher.handle_info(:debug_count, state)
         end)
 
+      assert log =~ @heading
       assert log =~ "blocks: 4"
       assert log =~ "internal transactions: 3"
       assert log =~ "receipts: 6"
@@ -85,10 +97,8 @@ defmodule Explorer.Indexer.BlockFetcherTest do
 
     setup do
       start_supervised!({Task.Supervisor, name: Explorer.Indexer.TaskSupervisor})
-      start_supervised!(
-        {Explorer.BufferedTask,
-          {AddressFetcher, max_batch_size: 100, max_concurrency: 2, name: AddressFetcher}}
-      )
+      start_address_fetcher!()
+      start_internal_transaction_fetcher!()
       {:ok, state} = BlockFetcher.init([])
 
       %{state: state}
@@ -119,6 +129,9 @@ defmodule Explorer.Indexer.BlockFetcherTest do
                 transactions: []
               }} = BlockFetcher.import_range({0, 0}, state, sequence)
 
+      wait_for_tasks(InternalTransactionFetcher)
+      wait_for_tasks(AddressFetcher)
+
       assert Repo.aggregate(Block, :count, :hash) == 1
       assert Repo.aggregate(Address, :count, :hash) == 1
     end
@@ -148,17 +161,7 @@ defmodule Explorer.Indexer.BlockFetcherTest do
                         132, 251, 118, 155, 61, 60, 188, 204, 132, 113, 189>>
                   }
                 ],
-                internal_transactions: [
-                  %{
-                    index: 0,
-                    transaction_hash: %Explorer.Chain.Hash{
-                      byte_count: 32,
-                      bytes:
-                        <<83, 189, 136, 72, 114, 222, 62, 72, 134, 146, 136, 27, 174, 236, 38, 46, 123, 149, 35, 77, 57,
-                          101, 36, 140, 57, 254, 153, 47, 255, 212, 51, 229>>
-                    }
-                  }
-                ],
+                internal_transactions: [],
                 logs: [
                   %{
                     index: 0,
@@ -188,6 +191,9 @@ defmodule Explorer.Indexer.BlockFetcherTest do
                 ]
               }} = BlockFetcher.import_range({@first_full_block_number, @first_full_block_number}, state, sequence)
 
+      wait_for_tasks(InternalTransactionFetcher)
+      wait_for_tasks(AddressFetcher)
+
       assert Repo.aggregate(Block, :count, :hash) == 1
       assert Repo.aggregate(Address, :count, :hash) == 2
       assert Repo.aggregate(InternalTransaction, :count, :id) == 1
@@ -195,6 +201,28 @@ defmodule Explorer.Indexer.BlockFetcherTest do
       assert Repo.aggregate(Receipt, :count, :transaction_hash) == 1
       assert Repo.aggregate(Transaction, :count, :hash) == 1
     end
+  end
+
+  defp start_address_fetcher! do
+    start_supervised!({AddressFetcher, [
+      name: AddressFetcher,
+      task_supervisor: Explorer.Indexer.TaskSupervisor,
+      init_chunk_size: 1,
+      flush_interval: 50,
+      max_batch_size: 1,
+      max_concurrency: 10,
+    ]})
+  end
+
+  defp start_internal_transaction_fetcher! do
+    start_supervised!({InternalTransactionFetcher, [
+      name: InternalTransactionFetcher,
+      task_supervisor: Explorer.Indexer.TaskSupervisor,
+      init_chunk_size: 1,
+      flush_interval: 50,
+      max_batch_size: 1,
+      max_concurrency: 10,
+    ]})
   end
 
   defp capture_log_at_level(level, block) do
@@ -226,6 +254,33 @@ defmodule Explorer.Indexer.BlockFetcherTest do
     {:ok, state} = BlockFetcher.init([])
 
     %{state: state}
+  end
+
+  defp wait_until(timeout, producer) do
+    parent = self()
+    ref = make_ref()
+
+    spawn(fn -> do_wait_until(parent, ref, producer) end)
+
+    receive do
+      {^ref, :ok} -> :ok
+    after timeout -> exit(:timeout)
+    end
+  end
+  defp do_wait_until(parent, ref, producer) do
+    if producer.() do
+      send(parent, {ref, :ok})
+    else
+      :timer.sleep(100)
+      do_wait_until(parent, ref, producer)
+    end
+  end
+
+  defp wait_for_tasks(buffered_task) do
+    wait_until(5000, fn ->
+      counts = Explorer.BufferedTask.debug_count(buffered_task)
+      counts.buffer == 0 and counts.tasks == 0
+    end)
   end
 
   defp wait(producer) do
