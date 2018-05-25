@@ -16,12 +16,13 @@ defmodule Explorer.Indexer.InternalTransactionFetcher do
 
   @behaviour BufferedTask
 
-  @max_batch_size 50
-  @max_concurrency 8
+  @max_batch_size 10
+  @max_concurrency 4
   @defaults [
     flush_interval: :timer.seconds(3),
     max_concurrency: @max_concurrency,
-    max_batch_size: @max_batch_size
+    max_batch_size: @max_batch_size,
+    stream_chunk_size: 5000,
   ]
 
   @doc """
@@ -54,7 +55,7 @@ defmodule Explorer.Indexer.InternalTransactionFetcher do
 
   @impl BufferedTask
   def init(acc, reducer) do
-    Chain.stream_transactions_with_unfetched_internal_transactions(acc, fn
+    Chain.stream_transactions_with_unfetched_internal_transactions([:hash], acc, fn
       %Transaction{hash: hash}, acc -> reducer.(Hash.to_string(hash), acc)
     end)
   end

@@ -123,7 +123,7 @@ defmodule Explorer.Chain do
 
   # timeouts all in milliseconds
 
-  @transaction_timeout 60_000
+  @transaction_timeout 120_000
   @insert_addresses_timeout 60_000
   @insert_blocks_timeout 60_000
   @insert_internal_transactions_timeout 60_000
@@ -168,14 +168,16 @@ defmodule Explorer.Chain do
     # MUST match order used in `insert_addresses/2`
     ordered_changes_list = sort_address_changes_list(changes_list)
 
-    {_, _} =
-      Repo.safe_insert_all(
-        Address,
-        ordered_changes_list,
-        conflict_target: :hash,
-        on_conflict: :replace_all,
-        timeout: Keyword.get(options, :timeout, @insert_addresses_timeout)
-      )
+    Repo.transaction(fn ->
+      {_, _} =
+        Repo.safe_insert_all(
+          Address,
+          ordered_changes_list,
+          conflict_target: :hash,
+          on_conflict: :replace_all,
+          timeout: Keyword.get(options, :timeout, @insert_addresses_timeout)
+        )
+    end, timeout: @transaction_timeout)
 
     :ok
   end
@@ -872,27 +874,27 @@ defmodule Explorer.Chain do
       0
 
   """
-  def stream_unfetched_addresses(initial, reducer) when is_function(reducer) do
+  def stream_unfetched_addresses(fields, initial, reducer) when is_function(reducer) do
     Repo.transaction(fn ->
-      query = from(a in Address, where: is_nil(a.balance_fetched_at))
+      query = from(a in Address, where: is_nil(a.balance_fetched_at), select: ^fields)
 
       query
-      |> Repo.stream()
+      |> Repo.stream(timeout: :infinity)
       |> Enum.reduce(initial, reducer)
-    end)
+    end, timeout: :infinity)
   end
 
   @doc """
   Returns a stream of all transactions with unfetched internal transactions.
   """
-  def stream_transactions_with_unfetched_internal_transactions(initial, reducer)
+  def stream_transactions_with_unfetched_internal_transactions(fields, initial, reducer)
       when is_function(reducer) do
 
     Repo.transaction(fn ->
-      from(t in Transaction, where: is_nil(t.internal_transactions_indexed_at))
-      |> Repo.stream()
+      from(t in Transaction, where: is_nil(t.internal_transactions_indexed_at), select: ^fields)
+      |> Repo.stream(timeout: :infinity)
       |> Enum.reduce(initial, reducer)
-    end)
+    end, timeout: :infinity)
   end
 
   @doc """
@@ -973,7 +975,7 @@ defmodule Explorer.Chain do
         query = from(b in Block, select: b.number, order_by: [asc: b.number])
 
         query
-        |> Repo.stream(max_rows: 1000)
+        |> Repo.stream(max_rows: 1000, timeout: :infinity)
         |> Enum.reduce({-1, 0, []}, fn
           num, {prev, missing_count, acc} when prev + 1 == num ->
             {num, missing_count, acc}
@@ -1623,7 +1625,7 @@ defmodule Explorer.Chain do
         from(t in Transaction,
           where: t.hash in ^transaction_hashes,
           update: [set: [internal_transactions_indexed_at: ^timestamps.updated_at]])
-        |> Repo.update_all([])
+        |> Repo.update_all([], timeout: @transaction_timeout)
       {:ok, result}
     end)
     |> Multi.run(:internal_transactions, fn _ ->
@@ -1632,7 +1634,7 @@ defmodule Explorer.Chain do
         timeout: @insert_internal_transactions_timeout
       )
     end)
-    |> Repo.transaction()
+    |> Repo.transaction(timeout: @transaction_timeout)
   end
 
   @spec insert_internal_transactions([map()], [timestamps_option]) ::

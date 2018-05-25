@@ -13,7 +13,8 @@ defmodule Explorer.Indexer.AddressFetcher do
   @defaults [
     flush_interval: :timer.seconds(3),
     max_batch_size: 100,
-    max_concurrency: 2,
+    max_concurrency: 4,
+    stream_chunk_size: 1000,
   ]
 
   @doc """
@@ -32,7 +33,7 @@ defmodule Explorer.Indexer.AddressFetcher do
 
   @impl BufferedTask
   def init(acc, reducer) do
-    Chain.stream_unfetched_addresses(acc, fn %Address{hash: hash}, acc ->
+    Chain.stream_unfetched_addresses([:hash], acc, fn %Address{hash: hash}, acc ->
       reducer.(Hash.to_string(hash), acc)
     end)
   end

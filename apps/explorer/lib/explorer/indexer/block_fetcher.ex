@@ -25,11 +25,8 @@ defmodule Explorer.Indexer.BlockFetcher do
   # These are all the *default* values for options.
   # DO NOT use them directly in the code.  Get options from `state`.
 
-  @blocks_batch_size 100
+  @blocks_batch_size 50
   @blocks_concurrency 10
-
-  @internal_transactions_batch_size 50
-  @internal_transactions_concurrency 8
 
   # milliseconds
   @block_rate 5_000
@@ -79,10 +76,6 @@ defmodule Explorer.Indexer.BlockFetcher do
       realtime_interval: (opts[:block_rate] || @block_rate) * 2,
       blocks_batch_size: Keyword.get(opts, :blocks_batch_size, @blocks_batch_size),
       blocks_concurrency: Keyword.get(opts, :blocks_concurrency, @blocks_concurrency),
-      internal_transactions_batch_size:
-        Keyword.get(opts, :internal_transactions_batch_size, @internal_transactions_batch_size),
-      internal_transactions_concurrency:
-        Keyword.get(opts, :internal_transactions_concurrency, @internal_transactions_concurrency),
       receipts_batch_size: Keyword.get(opts, :receipts_batch_size, @receipts_batch_size),
       receipts_concurrency: Keyword.get(opts, :receipts_concurrency, @receipts_concurrency)
     }
@@ -134,7 +127,13 @@ defmodule Explorer.Indexer.BlockFetcher do
         internal transactions: #{Chain.internal_transaction_count()}
         receipts: #{Chain.receipt_count()}
         logs: #{Chain.log_count()}
-        addresses: #{Chain.address_count()}
+
+      ================================
+      deferred fetches
+      ================================
+        address balances: #{Explorer.BufferedTask.debug_count(AddressFetcher)}
+        internal transactions: #{Explorer.BufferedTask.debug_count(InternalTransactionFetcher)}
+
       """
     end)
 
